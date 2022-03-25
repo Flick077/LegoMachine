@@ -6,9 +6,9 @@ I apologize for the poor quality of interfacing with this script... that's all I
 
 ## Running the script
 
-To execute the python script on Blender using a config file
+To execute the python script on Blender using a config file:
 
-blender -b --python generate.py -- \<filename\>
+    blender -b --python generate.py -- \<filename\>
 
 ## Dependencies
 
