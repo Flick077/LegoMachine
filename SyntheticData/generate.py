@@ -427,14 +427,15 @@ def ensure_dataset(kwargs: dict):
     """
     # ensure directory structure
     dset = kwargs['dataset']
-    _ensure_dir(dset)
+    _ensure_dir('datasets')
+    _ensure_dir(os.path.join('datasets', dset))
     for dir in ['images', 'labels']:
-        _ensure_dir(os.path.join(dset, dir))
+        _ensure_dir(os.path.join('datasets', dset, dir))
         for fdr in ['train', 'test', 'val']:
-            _ensure_dir(os.path.join(dset, dir, fdr))
+            _ensure_dir(os.path.join('datasets', dset, dir, fdr))
 
     # ensure YAML file
-    yaml = os.path.join(dset, f'{dset}.yaml')
+    yaml = os.path.join('datasets', dset, f'{dset}.yaml')
     cnums = []
     if not os.path.exists(yaml):
         cnums = kwargs['parts']
@@ -458,7 +459,7 @@ def ensure_dataset(kwargs: dict):
         # point to directories
         cwd = os.getcwd()
         for fdr in ['train', 'test', 'val']:
-            file.write(f'{fdr}: {os.path.join(cwd, dset, "images", fdr)}\n')
+            file.write(f'{fdr}: {os.path.join(cwd, "datasets", dset, "images", fdr)}\n')
         file.write('\n')
 
         # class information
@@ -519,12 +520,12 @@ def save_to_set(cnums: list, fdr: str, kwargs: dict):
         boxes[i] /= np.array([render.resolution_x, render.resolution_y, ] * 2)
 
     # write txt file for bounding box
-    with open(os.path.join(kwargs['dataset'], 'labels', fdr, f'{fname}.txt'), '+w') as yaml:
+    with open(os.path.join('datasets', kwargs['dataset'], 'labels', fdr, f'{fname}.txt'), '+w') as yaml:
         for item in range(len(cnums)):
             yaml.write(' '.join([str(cnums[item]), *(map(lambda f: str(f), boxes[item]))]) + '\n')
 
     # save image
-    cv2.imwrite(os.path.join(kwargs['dataset'], 'images', fdr, f'{fname}.png'), img["image"][..., ::-1])
+    cv2.imwrite(os.path.join('datasets', kwargs['dataset'], 'images', fdr, f'{fname}.png'), img["image"][..., ::-1])
 
 
 class ConfigFileError(Exception):

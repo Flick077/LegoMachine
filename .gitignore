@@ -1,3 +1,6 @@
-SyntheticData/.idea/*
-SyntheticData/gen2/*
-SyntheticData/gen.inf
+# setup files specific to each machine
+gen.inf
+*.cfg
+
+# pycharm files
+.idea/
