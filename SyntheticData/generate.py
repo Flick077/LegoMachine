@@ -550,15 +550,22 @@ def main(kwargs: dict):
     ensure_dataset(kwargs)
 
     # temporarily add LDView to environment path
-    os.environ["PATH"] += os.pathsep + kwargs['ldview']
+    if 'ldview' in kwargs:
+        os.environ["PATH"] += os.pathsep + kwargs['ldview']
 
     # ensure all stl files are available
     dir = kwargs['stl_dir']
     for part in kwargs['parts']:
         stl_path = os.path.join(dir, f'{part}.stl')
         if not os.path.exists(stl_path):
-            dat_path = os.path.join(kwargs['ldraw'], f'{part}.dat')
-            os.system(f'LDView64 {dat_path} -ExportFile={stl_path}')
+            # create stl files if possible
+            if 'ldraw' in kwargs:
+                dat_path = os.path.join(kwargs['ldraw'], f'{part}.dat')
+                os.system(f'LDView64 {dat_path} -ExportFile={stl_path}')
+            # remove part from list if part generation not available
+            else:
+                kwargs['parts'].remove(part)
+
 
     # TODO: load .blend files
     #   - maybe it will be run by "blender <scene>.blend -b --python generate.py -- <config>.cfg"
