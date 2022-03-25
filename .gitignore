@@ -1,6 +1,9 @@
 # setup files specific to each machine
 gen.inf
+
+# personal config files
 *.cfg
+!example.cfg
 
 # pycharm files
 .idea/

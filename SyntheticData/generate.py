@@ -18,6 +18,9 @@ import numpy as np
 #       > -19m on x-axis for center
 #       > 13m displacement on y-axis to join the pieces
 #   - add dirty texture to legos
+#   - determine non-specified dataset names
+#   - determine default lego models when parts unspecified
+#   - handle yaml generation when parts unspecified
 
 # a list of the most common lego colors from the rebrickable site
 lego_colors = {
