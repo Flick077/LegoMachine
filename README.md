@@ -39,7 +39,7 @@ The config files for this script are intended to make manipulation of the datase
  - **gravity**: boolean variable with values _on_ or _off_. Enables gravity simulation prior to rendering the image in order to add realism. Defaults to _on_.
  - **split**: controls the split between training, validation, and test data. Should be a comma-separated list of three numeric values in the order _train_, _val_, _test_. The values will automatically be normalized, but will default to 70% train, 20% validate, and 10% test (i.e., "split=7, 2, 1").
 
-An example config file is available for viewing in the SyntheticData folder. 
+An [example config file](SyntheticData/example.cfg) is available for viewing in the SyntheticData folder. 
 
 ## Fender Blenders
 
