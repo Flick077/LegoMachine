@@ -223,6 +223,7 @@ def parse_args(arguments: List[Argument], argv: List[str]) -> dict:
         argument.parse(argv, kwargs)
     if '--config-strict' not in argv:
         _ensure_args(arguments, kwargs)
+    _parse_inf(kwargs)
     return kwargs
 
 
@@ -274,6 +275,19 @@ def _parse_config(config_file: str, kwargs: dict):
         except Exception as e:
             # propagate exception with additional information
             raise ConfigFileError(config_file, line_num, line, e)
+
+
+def _parse_inf(kwargs: dict):
+    """
+    Reads the gen.inf file to find supporting executables and data stores.
+    """
+    if not os.path.exists('gen.inf'):
+        raise Exception('Cannot execute without gen.inf file')
+    with open('gen.inf', 'r') as inf:
+        for line in inf.readlines():
+            if '=' in line:
+                key, val = line.split('=', 1)
+                kwargs[key] = val
 
 
 def _remove_blender_args(args: List[str]) -> List[str]:
@@ -442,16 +456,15 @@ def ensure_dataset(kwargs: dict):
             cnums = list(unique(cnums))
     with open(yaml, '+w') as file:
         # point to directories
+        cwd = os.getcwd()
         for fdr in ['train', 'test', 'val']:
-            file.write(f'{fdr}: {"/".join([dset, "images", fdr])}\n')
+            file.write(f'{fdr}: {os.path.join(cwd, dset, "images", fdr)}\n')
         file.write('\n')
 
         # class information
         file.write(f'nc: {len(cnums)}\n')
         file.write(f'names: {cnums}')
     kwargs['cnums'] = cnums
-
-    # copy structure yaml file???
 
 
 def _ensure_dir(path: str):
@@ -537,18 +550,18 @@ def main(kwargs: dict):
     ensure_dataset(kwargs)
 
     # temporarily add LDView to environment path
-    # TODO: provide setup option to determine location of LDView
-    os.environ["PATH"] += os.pathsep + 'C:/Program Files/LDraw (64 Bit)/LDView'
+    os.environ["PATH"] += os.pathsep + kwargs['ldview']
 
     # ensure all stl files are available
-    # TODO: allow setup or config to specify LDraw parts library
-    ldraw_parts = 'C://Users/Public/Documents/LDraw/parts'
     dir = kwargs['stl_dir']
     for part in kwargs['parts']:
         stl_path = os.path.join(dir, f'{part}.stl')
         if not os.path.exists(stl_path):
-            dat_path = os.path.join(ldraw_parts, f'{part}.dat')
+            dat_path = os.path.join(kwargs['ldraw'], f'{part}.dat')
             os.system(f'LDView64 {dat_path} -ExportFile={stl_path}')
+
+    # TODO: load .blend files
+    #   - maybe it will be run by "blender <scene>.blend -b --python generate.py -- <config>.cfg"
 
     # set render parameters
     render = bpy.context.scene.render
