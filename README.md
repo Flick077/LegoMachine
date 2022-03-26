@@ -28,6 +28,16 @@ To execute the python script on Blender using a config file:
 
     blender -b --python generate.py -- example.cfg
     
+The "--" argument is used to separate blender arguments from script arguments, as per Blender's documentation. 
+
+The "-b" flag indicates that blender should be run in the background. This speeds up the execution of the script, and is generally preferred since the blender GUI will not render until the python script has finished executing.
+
+The "--python" flag indicates that the next argument is a python script to execute.
+
+### Script arguments
+
+The script takes several optional arguments, all of which must be specified after the argument separator "--" as mentioned above. Because config files can specify the same amount of information with a more manageable editing scheme, it is recommended that the only argument you supply for execution is the name of the config file immediately after the argument separator. In the example above, the "example.cfg" file is the only argument passed to the python script, and the script's parameters are parsed from that file.
+    
 ### Config Files
 
 The config files for this script are intended to make manipulation of the dataset parameters more flexible, but the parsing algorithm is not very robust (it doesn't even check the file extension at the moment XD). Config files are text files in which each line is a key-value pair separated by an "=". See below for a list of keys currently recommended for use:
@@ -47,7 +57,12 @@ If you haven't worked external python scripts and Blender before, there are a fe
  - Blender must have access to the python binaries
  - Blender must have access to any python modules imported in the script
 
-Blender will search the PATH environment variable on the machine, and will search its own directory. If all necessary python binaries and modules are accessible via the PATH, then Blender will have no problem executing the script. If you are using a virtual environment that you would like Blender to have access to, replace Blender's python directory wit a directory junction (symbolic link) that redirects to the virtual environment's binaries and modules.
+Blender will search the PATH environment variable on the machine, and will search its own directory. This leads to two solutions for granting blender access to all python packages and binaries:
+
+1. Ensure that your python directory is in the PATH environment variable
+2. Replace Blender's python directory with a directory junction (or symbolic link) that redirects to the binaries and modules.
+
+When using virtual environments, it is generally preferable to implement option two and redirect Blender's python directory to the python directory of the environment designated for operating with blender. 
 
 ## LDView and LDraw
 
