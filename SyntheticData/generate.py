@@ -601,7 +601,7 @@ def main(kwargs: dict):
     size = max(int(kwargs['size']), len(kwargs['split']))
     for fnum, fdr in enumerate(['train', 'val', 'test']):
         subsize = int(size * kwargs['split'][fnum])
-        for _ in range(subsize):
+        for i in range(subsize):
             # clear legos and probabilistically remove the background
             keep = [bg if random.random() < 0.8 else None]
             remove_objects(['MESH'], keep=keep)
@@ -610,8 +610,12 @@ def main(kwargs: dict):
 
             # add parts to scene
             num_parts = random.randint(0, int(kwargs['capacity']))
-            parts = []
-            for _ in range(num_parts):
+            # first lego should be nonrandom for stratified sampling purposes
+            part = kwargs['parts'][i % len(kwargs['parts'])]
+            add_lego(part, kwargs)
+            parts = [kwargs['cnums'].index(part)]
+            # fill remaining part slots with random legos
+            for _ in range(num_parts-1):
                 # get random part id
                 part = random.choice(kwargs["parts"])
 
