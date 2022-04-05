@@ -1,0 +1,26 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>My Little Website</title>
+  <link rel="stylesheet" href="/static/main.css">
+  <script src="static/main.js"></script>
+</head>
+
+<body>
+  <ol>
+    {% for guest in guests %}
+    <li> {{guest}} </li>
+    {% endfor %}
+  </ol>
+
+  <form id="guestForm" action="/guest_list" method="post">
+    <label for="guest">Your Name</label><br>
+    <input type="text" id="guest" name="guest" value="">
+    <br>
+    <button id="submit">Generate!</button>
+  </form>
+</body>
+</html>
