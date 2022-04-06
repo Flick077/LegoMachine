@@ -3,15 +3,12 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Tuple, Union
+import math
+import uuid
+import tempfile
+import os
 
 import bpy
-import bpycv
-import os
-import math
-import time
-
-import cv2
-import numpy as np
 
 # TODO
 #   - add stl conveyor background
@@ -22,6 +19,7 @@ import numpy as np
 #   - determine default lego models when parts unspecified
 #   - handle yaml generation when parts unspecified
 
+"""
 # a list of the most common lego colors from the rebrickable site
 lego_colors = {
     'black': '0x05131d',
@@ -32,6 +30,24 @@ lego_colors = {
     'yellow': '0xf2cd37',
     'blue': '0x0055bf'
 }
+"""
+
+# some random lego colors I thought looked nice
+lego_colors = {
+    'white': '#F4F4F4',
+    'bright red': '#B40000',
+    'grey': '#8A928D',
+    'bright blue': '#1E5AA8',
+    'bright yellow': '#FAC80A',
+    'black': '#1B2A34',
+    'dark green': '#00852B',
+    'bright violet': '#671F81',
+    'sand green': '#708E7C',
+    'earth blue': '#19325A'
+}
+
+
+color_cache = dict()
 
 
 @dataclass
@@ -195,8 +211,8 @@ class SetSplitArgument(MultiArgument):
         if type(val) is not list or len(val) != 3:
             self.value_error(value=val)
         # normalize split
-        val = np.array(list(map(lambda s: float(s), val)))
-        kwargs[self.name] = list(val / val.sum())
+        val = [float(v) for v in val]
+        kwargs[self.name] = [v / sum(val) for v in val]
 
 
 def parse_args(arguments: List[Argument], argv: List[str]) -> dict:
@@ -290,7 +306,7 @@ def _parse_inf(kwargs: dict):
         for line in inf.readlines():
             if '=' in line:
                 key, val = line.split('=', 1)
-                kwargs[key] = val
+                kwargs[key] = val.strip()
 
 
 def _remove_blender_args(args: List[str]) -> List[str]:
@@ -330,9 +346,10 @@ def add_background(file: str, kwargs: dict) -> bpy.types.Object:
     if kwargs['gravity'] == 'on':
         bpy.ops.rigidbody.objects_add(type='PASSIVE')
     bg = bpy.context.active_object
-    bg.scale = (100,) * 3
+    bg.scale = (1,) * 3
     bg.rotation_euler = (0, 0, 0)
-    bg.location = (0, 7.5, 0)
+    bg.location = (0, 0, 0)
+    bpy.ops.object.transform_apply(location=False, scale=True, rotation=True, properties=False)
     return bg
 
 
@@ -350,36 +367,29 @@ def add_lego(part: str, kwargs: dict) -> bpy.types.Object:
     # add mesh to scene
     bpy.ops.import_mesh.stl(filepath=os.path.join(kwargs['stl_dir'], f'{part}.stl'))
     lego = bpy.context.active_object
+    # ensure object center of mass is in the center
+    bpy.ops.object.origin_set(type="ORIGIN_CENTER_OF_VOLUME")
     # add object's instance id for bpycv
     lego["inst_id"] = kwargs['inst_id']
     kwargs['inst_id'] += 1
     # add randomized material to the lego
-    lego.active_material = _randomized_material()
+    lego.active_material = _randomized_material(kwargs)
     # randomize location and orientation
-    lego.location = (random.random() * 40 - 20, random.random() * 40 - 20, 5)
+    lego.location = ((random.random() * 4 - 2) * 0.0254, (random.random() * 4 - 2) * 0.0254, 5 * 0.0254)
+    lego.scale = (0.01, 0.01, 0.01)
     lego.rotation_euler = tuple(math.radians(random.randrange(360)) for _ in range(3))
+
+    bpy.ops.object.transform_apply(location=False, scale=True, rotation=False, properties=False)
+
     # enable necessary constraints for gravity simulation
     if kwargs["gravity"] == 'on':
         bpy.ops.rigidbody.objects_add(type='ACTIVE')
-        if 'lego_area' not in kwargs:
-            # use cam data to calculate viewable area
-            cam = bpy.context.scene.camera
-            ymin = cam.location[1] + math.tan(cam.rotation_euler[0] - cam.data.angle / 2) * cam.location[2]
-            ymax = cam.location[1] + math.tan(cam.rotation_euler[0] + cam.data.angle / 2) * cam.location[2]
-            xdis = cam.location[2] * math.tan(cam.data.angle / 2)
-            # cam.location[2] * math.tan(cam.data.angle / 2) / math.cos(cam.rotation_euler[0] - cam.data.angle / 2)
-            xmax = cam.location[0] + xdis
-            xmin = cam.location[0] - xdis
-            # TODO: better fit of view area
-            # wmin = 2 * cam.location[2] * math.tan(cam.data.angle / 2) / math.cos(
-            #     cam.rotation_euler[0] - cam.data.angle / 2)
-            # wmax = 2 * cam.location[2] * math.tan(cam.data.angle / 2) / math.cos(
-            #     cam.rotation_euler[0] + cam.data.angle / 2)
-            kwargs['lego_area'] = (xmin, ymin, xmax, ymax)
+        lego.rigid_body.mass = 0.002
+        lego.rigid_body.collision_shape = 'CONVEX_HULL'
     return lego
 
 
-def _randomized_material(**kwargs) -> bpy.types.Material:
+def _randomized_material(kwargs: dict) -> bpy.types.Material:
     """
     Generate a domain-randomized material for a lego blender object
     """
@@ -387,17 +397,27 @@ def _randomized_material(**kwargs) -> bpy.types.Material:
     # TODO: add data set config file
     # TODO: texture randomization
     color_name, color = _random_color()
-    mat = bpy.data.materials.new(color_name)
-    mat.use_nodes = True
-    principled = mat.node_tree.nodes['Principled BSDF']
-    principled.inputs['Base Color'].default_value = color
-    principled.inputs['Metallic'].default_value = 0.0
-    principled.inputs['Roughness'].default_value = 0.0
-    principled.inputs['Specular'].default_value = 1.0
+    if kwargs['use_blend_file'] == 'yes':
+        if color_name in color_cache:
+            return color_cache[color_name]
+        else:
+            mat = bpy.data.materials["Lego Reference Material"].copy()
+            print(color)
+            mat.node_tree.nodes["RGB"].outputs[0].default_value = color
+            color_cache[color_name] = mat
+    else:
+        mat = bpy.data.materials.new(color_name)
+        mat.use_nodes = True
+        principled = mat.node_tree.nodes['Principled BSDF']
+        principled.inputs['Base Color'].default_value = color
+        principled.inputs['Metallic'].default_value = 0.0
+        principled.inputs['Roughness'].default_value = 0.0
+        principled.inputs['Specular'].default_value = 1.0
+
     return mat
 
 
-def _random_color() -> (str, Tuple):
+def _random_color() -> Tuple[str, Tuple]:
     """
     Selects a random lego color
     :return: The color name and the rgba tuple value for the color
@@ -412,13 +432,17 @@ def _hex_to_rgba(hex_str: str) -> Tuple:
     :param hex_str: A string of form 'rrggbb', 'rrggbbaa', '0xrrggbb', or '0xrrggbbaa'
     :return: the equivalent tuple
     """
-    if hex_str[:2] == '0x':
+    if hex_str[:1] == '#':
+        hex_str = hex_str[1:]
+    elif hex_str[:2] == '0x':
         hex_str = hex_str[2:]
+    
     if len(hex_str) == 6:
         return (*[int(hex_str[s:s + 2], 16) / 255.0 for s in range(0, 6, 2)], 1.0)
-    if len(hex_str) == 8:
+    elif len(hex_str) == 8:
         return tuple(int(hex_str[s:s + 2], 16) / 255.0 for s in range(0, 8, 2))
-    raise ValueError("hex_str should be of form 'rrggbb', 'rrggbbaa', '0xrrggbb', or '0xrrggbbaa'")
+        
+    raise ValueError("hex_str should be of form 'rrggbb', 'rrggbbaa', '0xrrggbb', '#rrggbb', or '0xrrggbbaa'")
 
 
 def ensure_dataset(kwargs: dict):
@@ -482,21 +506,22 @@ def _ensure_dir(path: str):
         os.mkdir(path)
 
 
-def save_to_set(cnums: list, fdr: str, kwargs: dict):
+def save_to_set(rendered_parts: dict, fdr: str, kwargs: dict):
     """
     Saves the current blender file to the dataset directory in compliance with YOLO's specifications
 
-    :param cnums: the class numbers of the added parts
+    :param rendered_parts: the class numbers of the added parts
     :param fdr: the subfolder of the dataset directory to place the images and labels in (i.e. 'train', 'val', 'test')
     :param kwargs: the keyword arguments parsed from commandline and config
     """
     # generate unique file name
-    fname = str(time.time()).replace('.', '')
+    fname = uuid.uuid4().hex
 
     # find bounding boxes
     # WARN: may need to set frame to 100 if gravity is enabled
     bpy.context.scene.frame_set(100)
     img = bpycv.render_data()
+    cnums = list(rendered_parts.values())
     unique, _idxs = np.unique(img["inst"], return_inverse=True)
     idxs = _idxs.reshape(img["inst"].shape)
     boxes = np.zeros((len(cnums), 4))
@@ -525,10 +550,13 @@ def save_to_set(cnums: list, fdr: str, kwargs: dict):
     # write txt file for bounding box
     with open(os.path.join('datasets', kwargs['dataset'], 'labels', fdr, f'{fname}.txt'), '+w') as yaml:
         for item in range(len(cnums)):
-            yaml.write(' '.join([str(cnums[item]), *(map(lambda f: str(f), boxes[item]))]) + '\n')
+            yaml.write(' '.join([str(kwargs['cnums'].index(cnums[item])), *(map(lambda f: str(f), boxes[item]))]) + '\n')
 
     # save image
     cv2.imwrite(os.path.join('datasets', kwargs['dataset'], 'images', fdr, f'{fname}.png'), img["image"][..., ::-1])
+
+    if kwargs['save_generated_scenes'] == 'yes':
+        bpy.ops.wm.save_as_mainfile(filepath=fname + ".blend")
 
 
 class ConfigFileError(Exception):
@@ -549,7 +577,37 @@ class ArgumentError(Exception):
         super().__init__(msg)
 
 
+class Task():
+    max_name_len = 0
+    max_total_len = 0
+
+    def __init__(self, name, total):
+        self.name = name
+        self.total = total
+        self.progress = 0
+
+        self.total_len = len(str(self.total))
+        if self.total_len > Task.max_total_len:
+            Task.max_total_len = self.total_len
+
+        if len(self.name) > Task.max_name_len:
+            Task.max_name_len = len(self.name)
+
+    def advance(self):
+        self.progress += 1
+    
+    def __str__(self):
+        return f"{self.name:{Task.max_name_len}s}: {self.progress:{Task.max_total_len}d} / {self.total:{Task.max_total_len}d} --- {self.progress / self.total * 100:.2f}%"
+
+
+
 def main(kwargs: dict):
+    # import the packages we need here
+    global cv2, bpycv, np
+    import cv2
+    import bpycv
+    import numpy as np
+
     # ensure dataset directory is prepared for data
     ensure_dataset(kwargs)
 
@@ -565,84 +623,112 @@ def main(kwargs: dict):
             # create stl files if possible
             if 'ldraw' in kwargs:
                 dat_path = os.path.join(kwargs['ldraw'], f'{part}.dat')
+                print(dat_path)
                 os.system(f'LDView64 {dat_path} -ExportFile={stl_path}')
             # remove part from list if part generation not available
             else:
                 kwargs['parts'].remove(part)
 
-
-    # TODO: load .blend files
-    #   - maybe it will be run by "blender <scene>.blend -b --python generate.py -- <config>.cfg"
-
-    # set render parameters
+    
+    setup_scene = kwargs['use_blend_file'] == 'no'
+    
     render = bpy.context.scene.render
-    render.engine = kwargs['engine']
-    render.resolution_x, render.resolution_y = tuple(map(int, kwargs['resolution'].split('x')))
-
-    # place and configure camera
     cam = bpy.context.scene.camera
-    cam.location = (0, -30, 30)
-    cam.rotation_euler = (math.radians(40), 0, 0)
-    cam.data.lens_unit = 'FOV'
-    cam.data.angle = math.radians(60)
+    bg = None
 
-    # attach light source to camera
-    light = bpy.data.objects['Light']
-    bpy.context.view_layer.objects.active = light
-    bpy.ops.object.constraint_add(type='COPY_LOCATION')
-    bpy.context.object.constraints["Copy Location"].target = cam
-    bpy.data.lights[0].energy = 100000
+    if setup_scene:
+        print("Creating scene...")
 
-    # add background to render
-    bpy.ops.preferences.addon_enable(module='io_import_images_as_planes')
-    bg = add_background(random.choice(os.listdir('scenes')), kwargs)
+        # TODO: add enclosing container for physics sim
+
+        # set render parameters
+        render.engine = kwargs['engine']
+        render.resolution_x, render.resolution_y = tuple(map(int, kwargs['resolution'].split('x')))
+
+        # place and configure camera
+        cam.location = (0, -30, 30)
+        cam.rotation_euler = (math.radians(40), 0, 0)
+        cam.data.lens_unit = 'FOV'
+        cam.data.angle = math.radians(60)
+
+        # attach light source to camera
+        light = bpy.data.objects['Light']
+        bpy.context.view_layer.objects.active = light
+        bpy.ops.object.constraint_add(type='COPY_LOCATION')
+        bpy.context.object.constraints["Copy Location"].target = cam
+        bpy.data.lights[0].energy = 100000
+
+        # add background to render
+        bpy.ops.preferences.addon_enable(module='io_import_images_as_planes')
+        bg = add_background(random.choice(os.listdir('scenes')), kwargs)
+
+    purposes = ['train', 'val', 'test']
+
+    # calculate subsizes
+    size = max(int(kwargs['size']), len(kwargs['split']))
+    subsizes = [int(size * kwargs['split'][fnum]) for fnum in range(3)]
+    # ensure size is sum of all subsizes
+    size = sum(subsizes)
+
+    # create progress bars
+    tasks = [Task(f"Generating {purpose}...", subsizes[index]) for index, purpose in enumerate(purposes)]
+
+    active_parts = dict()
+    i = -1
 
     # generate dataset
-    size = max(int(kwargs['size']), len(kwargs['split']))
-    for fnum, fdr in enumerate(['train', 'val', 'test']):
-        subsize = int(size * kwargs['split'][fnum])
-        for i in range(subsize):
-            # clear legos and probabilistically remove the background
-            keep = [bg if random.random() < 0.8 else None]
-            remove_objects(['MESH'], keep=keep)
-            if keep[0] is None:
-                bg = add_background(random.choice(os.listdir('scenes')), kwargs)
+    for _ in range(size):
+        while True:
+            i = (i + 1) % 3
+            if subsizes[i] > 0:
+                subsizes[i] -= 1
+                break
 
-            # add parts to scene
-            num_parts = random.randint(0, int(kwargs['capacity']))
-            # first lego should be nonrandom for stratified sampling purposes
-            part = kwargs['parts'][i % len(kwargs['parts'])]
-            add_lego(part, kwargs)
-            parts = [kwargs['cnums'].index(part)]
-            # fill remaining part slots with random legos
-            for _ in range(num_parts-1):
-                # get random part id
-                part = random.choice(kwargs["parts"])
+        fdr = purposes[i]
+            
+        # probabilistically replace the background
+        if setup_scene and random.random() >= 0.8:
+            bpy.data.objects.remove(bg)
+            bg = add_background(random.choice(os.listdir('scenes')), kwargs)
 
-                # add masked lego object to scene
-                # TODO: add distractors?
-                lego = add_lego(part, kwargs)
+        # remove previous legos
+        for obj in active_parts.keys():
+            bpy.data.objects.remove(obj)
+        
+        active_parts = dict()
 
-                parts.append(kwargs['cnums'].index(part))
+        # add parts to scene
+        num_parts = int(max(0, min(int(kwargs['capacity']), random.normalvariate(int(kwargs['capacity']) * 2 / 3, 4))))
+        print(f"Adding {num_parts} legos to scene...")
+        for _ in range(num_parts):
+            # get random part id
+            part = random.choice(kwargs["parts"])
+            print(f"Added lego {part}")
 
-            # simulate gravity
-            if kwargs['gravity'] == 'on':
-                for f in range(100):
-                    bpy.context.scene.frame_set(f)
+            # add masked lego object to scene
+            # TODO: add distractors?
+            lego = add_lego(part, kwargs)
 
-            # render and save image and masks
-            # TODO: better handling of kwargs
-            box = kwargs['lego_area'] if 'lego_area' in kwargs else (0,) * 4
-            popped = 0
-            for idx, obj in enumerate(bpy.data.objects):
-                if 'inst_id' not in obj:
-                    continue
-                loc = obj.matrix_world.translation
-                if loc[0] < box[0] or loc[1] < box[1] or loc[0] > box[2] or loc[1] > box[3]:
-                    bpy.data.objects.remove(obj)
-                    parts.pop(idx - popped)
-                    popped += 1
-            save_to_set(parts, fdr, kwargs)
+            active_parts[lego] = part
+
+        # simulate gravity
+        if kwargs['gravity'] == 'on' and active_parts:
+            override = {'scene': bpy.context.scene, 'active_object': bpy.context.active_object, 'point_cache': bpy.context.scene.rigidbody_world.point_cache}
+            bpy.ops.ptcache.free_bake_all(override)
+            bpy.context.scene.frame_set(0)
+            bpy.ops.ptcache.bake(override, bake=True)
+
+        # render and save image and masks
+        save_to_set(active_parts, fdr, kwargs)
+
+        tasks[i].advance()
+
+        # print progress
+        print("--------------------------------------------------")
+        for task in tasks:
+            print(task)
+        print("--------------------------------------------------")
+
 
 
 if __name__ == '__main__':
@@ -659,8 +745,16 @@ if __name__ == '__main__':
         SingleArgument(name='stl_dir', flag='--stl-dir', default='stls'),
         MultiArgument(name='parts', flag='--parts', shortcut='-p', default=[]),
         SingleArgument(name='capacity', flag='--cap', default='1'),
-        SetSplitArgument()
+        SetSplitArgument(),
+        SingleArgument(name='use_blend_file', flag="--use-blend-file", default='yes', values=['yes', 'no']),
+        SingleArgument(name='save_generated_scenes', flag="--save-generated-scenes", default='no', values=['yes', 'no']),
+        SingleArgument(name='pkg_dir', flag="--package-dir", default="")
     ]
     main_args = parse_args(argument_list, sys.argv)
+
+    # add the provided python package directory to PATH
+    if main_args['pkg_dir']:
+        sys.path.append(main_args['pkg_dir'])
+    
     if 'exit' not in main_args:
         main(main_args)

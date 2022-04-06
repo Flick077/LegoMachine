@@ -48,6 +48,9 @@ The config files for this script are intended to make manipulation of the datase
  - **capacity**: the maximum number of legos to include in a single image.
  - **gravity**: boolean variable with values _on_ or _off_. Enables gravity simulation prior to rendering the image in order to add realism. Defaults to _on_.
  - **split**: controls the split between training, validation, and test data. Should be a comma-separated list of three numeric values in the order _train_, _val_, _test_. The values will automatically be normalized, but will default to 70% train, 20% validate, and 10% test (i.e., "split=7, 2, 1").
+ - **use_blend_file**: lets the script know whether Blender was ran with a .blend file. If so, the script will not create the background/lights/camera on its own.
+ - **save_generated_scenes**: whether to save a new blend file for every training image generated. Useful for debugging, otherwise just clutters up the folder.
+ - **pkg_dir**: this directory is added to PATH on startup. Allows the user to specify where Python should look for modules.
 
 An [example config file](SyntheticData/example.cfg) is available for viewing in the SyntheticData folder. 
 

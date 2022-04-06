@@ -7,3 +7,12 @@ gen.inf
 
 # pycharm files
 .idea/
+
+# synthetic datasets directory
+/SyntheticData/datasets/
+
+#
+/SyntheticData/stls/
+
+# any pycache directories
+__pycache__/
