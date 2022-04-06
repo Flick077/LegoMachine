@@ -608,6 +608,13 @@ def main(kwargs: dict):
     import bpycv
     import numpy as np
 
+    # override print so we can flush immediately on every print call.
+    # this resolves an issue where script output would be delayed when
+    # running with nohup.
+    def print(*args):
+        import builtins
+        return builtins.print(*args, flush=True)
+
     # ensure dataset directory is prepared for data
     ensure_dataset(kwargs)
 
