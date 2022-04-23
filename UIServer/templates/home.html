@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script src="/static/inference.js"></script>
+    <title>Lego Part Finder</title>
+</head>
+
+<body>
+    <div class="topSpacing"></div>
+    <div class="centerIt">
+        <form class="legoForm">
+            <h2>Lego Part Number:</h2>
+            <input id="desired-id" list="legoId" type="text">
+            <datalist id="legoId">
+                {% for class in classes %}
+                <option value="{{ class }}"></option>
+                {% endfor %}
+            </datalist>
+            <br><br>
+            <input id="start-button" class="startButton" type="submit" value="START">
+        </form>
+        <br><br><br>
+        <img id="result-img" src="/static/placeholder.png" alt="Image with bounding boxes">
+    </div>
+</body>
+
+</html>
