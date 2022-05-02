@@ -1,3 +1,4 @@
+import subprocess
 import ctypes
 import threading
 from typing import List, Tuple
@@ -11,12 +12,16 @@ from multiprocessing import Process
 import multiprocessing
 import io
 import base64
+import time
 app = Flask(__name__)
+#import motor
+motor = None
+
 
 
 INFERENCE_SERVER_ADDR = 'http://127.0.0.1:9001'
-WIDTH = 640
-HEIGHT = 480
+WIDTH = 1280
+HEIGHT = 720
 
 last_img_buf = multiprocessing.Array(ctypes.c_char, WIDTH * HEIGHT * 3)
 buffer_filled = multiprocessing.Value(ctypes.c_bool, False)
@@ -30,15 +35,53 @@ def lego():
     return render_template('home.html', classes=classes)
 
 
+@app.route('/open-hopper')
+def open_hopper():
+    motor.HopperDoorOpen()
+    return "Success", 200
+
+
+@app.route('/close-hopper')
+def close_hopper():
+    motor.HopperDoorClose()
+    return "Success", 200
+
+
+@app.route('/start-shaker')
+def start_shaker():
+    motor.ShakerTableOn()
+    return "Success", 200
+
+
+@app.route('/stop-shaker')
+def stop_shaker():
+    motor.ShakerTableOff()
+    return "Success", 200
+
+
+@app.route('/start-conveyor')
+def start_conveyor():
+    motor.ConveyorBeltOn()
+    return "Success", 200
+
+
+@app.route('/stop-conveyor')
+def stop_conveyor():
+    motor.ConveyorBeltOff()
+    return "Success", 200
+
+
 @app.route('/process-img')
 def process_img():
     img = copy_over_last_img()
-    result, encoded_image = cv2.imencode(".png", img)
+    result, encoded_image = cv2.imencode(".jpg", img)
     if not result:
         return "Failed to encode image", 500
     else:
-        return requests.post(INFERENCE_SERVER_ADDR + "/process-img", 
-            files=[('image', ('image.png', encoded_image, 'image/png'))]).text
+        return requests.post(INFERENCE_SERVER_ADDR + "/process-img",
+            files=[('image', ('image.jpg', encoded_image, 'image/jpeg'))]).text
+
+
 
 
 def copy_over_last_img() -> numpy.ndarray:
@@ -58,10 +101,17 @@ def reinit_camera() -> None:
     if vid:
         vid.release()
 
-    vid = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    vid = cv2.VideoCapture(0)
     #vid.set(cv2.CAP_PROP_SETTINGS, 0)
     vid.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
     vid.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
+    vid.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    try:
+        # filter 60Hz powerline interference
+        subprocess.run(["v4l2-ctl", "--set-ctrl", "power_line_frequency=2"])
+    except:
+        pass
 
 
 def camera_loop(img_array: multiprocessing.Array, last_img_lock: threading.Lock) -> None:
@@ -72,7 +122,7 @@ def camera_loop(img_array: multiprocessing.Array, last_img_lock: threading.Lock)
         frame = None
 
         while not ret:
-            # Get a frame from the camera
+            # Get latest frame from the camera
             ret, frame = vid.read()
 
             # if error, try reinitializing
@@ -86,7 +136,7 @@ def camera_loop(img_array: multiprocessing.Array, last_img_lock: threading.Lock)
 
         # Copy to shared buffer
         last_img_lock.acquire()
-        img_array[:] = frame_bytes
+        ctypes.memmove(img_array.get_obj(), frame_bytes, WIDTH * HEIGHT * 3)
         last_img_lock.release()
 
         if not buffer_filled.value:
@@ -103,7 +153,7 @@ def camera_loop(img_array: multiprocessing.Array, last_img_lock: threading.Lock)
         #if key & 0xFF == ord('q'):
         #    break
         
-        time.sleep(0.2)
+        time.sleep(0.3)
 
 
 def run_camera(img_array: multiprocessing.Array, last_img_lock: threading.Lock) -> None:
@@ -123,7 +173,9 @@ def run_camera(img_array: multiprocessing.Array, last_img_lock: threading.Lock) 
     cv2.destroyAllWindows()
 
 
-if __name__ == "__main__":
+def main():
+    global mutex, last_img_buf
+
     mutex = multiprocessing.Manager().Lock()
     p = Process(target=run_camera, args=(last_img_buf, mutex,))
 
@@ -131,7 +183,11 @@ if __name__ == "__main__":
     p.start()
 
     # Run web server
-    app.run('127.0.0.1', 9000, debug=False)
+    app.run('0.0.0.0', 9000, debug=False)
 
     # Wait for camera process to end
     p.join()
+
+
+if __name__ == "__main__":
+    main()

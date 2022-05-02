@@ -21,6 +21,12 @@ from utils.plots import Annotator, colors
 from utils.torch_utils import select_device
 from utils.augmentations import letterbox
 
+WIDTH = 1280
+HEIGHT = 720
+
+APPROVED_CLASSES = ["10247", "2357", "2420", "2458", "2495", "3023", "3031", "3040",
+                    "3710", "32064", "3794", "3795", "3894", "4079", "41770", "44728",
+                    "4865", "6143", "61780", "6541", "98302"]
 
 model = None
 device = None
@@ -28,9 +34,11 @@ device = None
 
 @app.route('/process-img', methods=['POST'])
 def process_img():
+    start = time.time()
     img_file = request.files['image']
     img = cv2.imread(img_file)
     result_obj = run_inference(img)
+    print("inference took", time.time() - start)
     
     return json.dumps(result_obj)
 
@@ -44,8 +52,10 @@ def get_classes():
 def run_inference(img0: numpy.ndarray) -> dict:
     global model, device
 
+    # img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
+
     # Resize
-    img = letterbox(img0, (640, 640), stride=model.stride, auto=True)[0]
+    img = letterbox(img0, (1024, int(1024 * (HEIGHT / WIDTH))), stride=model.stride, auto=True)[0]
 
     # Convert
     img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
@@ -58,7 +68,9 @@ def run_inference(img0: numpy.ndarray) -> dict:
         img = img[None]
     
     pred = model(img, augment=False, visualize=False)
-    pred = non_max_suppression(pred, 0.8, 0.45, None, False, max_det=1000)
+    #approved_class_indices = [model.names.index(x) for x in APPROVED_CLASSES]
+    pred = non_max_suppression(pred, 0.35, 0.45, None, False, multi_label=True, max_det=1000)
+
     det = pred[0]
     gn = torch.tensor(img.shape)[[1, 0, 1, 0]]
     annotator = Annotator(img0.copy(), line_width=3, example=str(model.names))
@@ -86,12 +98,13 @@ def run_inference(img0: numpy.ndarray) -> dict:
             annotator.box_label(xyxy, label, color=colors(c, True))
 
     result_img = annotator.result()    
-    result, buffer = cv2.imencode(".png", result_img)
+    result_img = cv2.resize(result_img, (854, int(854 * (HEIGHT / WIDTH))), interpolation=cv2.INTER_AREA)
+    result, buffer = cv2.imencode(".jpg", result_img)
 
     result_dict = dict()
     result_dict['boxes'] = objects
     if result:
-        result_dict['img'] = "data:image/png;base64," + base64.b64encode(buffer).decode("ascii")
+        result_dict['img'] = "data:image/jpeg;base64," + base64.b64encode(buffer).decode("ascii")
 
     return result_dict
 
@@ -101,12 +114,12 @@ def setup_inference(weights: str) -> None:
     device = select_device()
     model = DetectMultiBackend(weights, device=device)
     stride, names, pt = model.stride, model.names, model.pt
-    imgsz = (640, 640)
+    imgsz = (1024, 1024)
 
     model.warmup(imgsz=(1, 3, *imgsz))
 
 
 if __name__ == "__main__":
-    setup_inference("weights3.pt")
+    setup_inference("weights5.pt")
     app.run("127.0.0.1", 9001, debug=False)
 
