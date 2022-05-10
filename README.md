@@ -12,8 +12,8 @@
 
 ## How it works
 
-[software-diagram](figures/Detailed%20Software%20Diagram.png "Detailed software diagram.")
-[transmission-diagram](figures/Remote%20Inference%20Transmission%20Sequence.png) "Remote inference transmission diagram.")
+[software-diagram]: figures/Detailed%20Software%20Diagram.png "Detailed software diagram."
+[transmission-diagram]: figures/Remote%20Inference%20Transmission%20Sequence.png "Remote inference transmission diagram."
 ![alt text][software-diagram]
 
 The client browser runs on a personal computer, interfacing with the UI server running on the Raspberry Pi via HTTP requests. The UI server makes an HTTP request to the inference server when it needs an image to be processed. The Raspberry Pi uses its GPIO ports to (indirectly) control the motors, and uses USB to capture images from the camera.
