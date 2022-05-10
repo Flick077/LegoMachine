@@ -29,48 +29,57 @@ mutex = None
 vid = None
 
 
+# Main page
 @app.route('/')
 def lego():
     classes = json.loads(requests.get(INFERENCE_SERVER_ADDR + "/get-classes").text)
     return render_template('home.html', classes=classes)
 
 
+# Opens the hopper door
 @app.route('/open-hopper')
 def open_hopper():
     motor.HopperDoorOpen()
     return "Success", 200
 
 
+# Closes the hopper door
 @app.route('/close-hopper')
 def close_hopper():
     motor.HopperDoorClose()
     return "Success", 200
 
 
+# Starts the shaker motor
 @app.route('/start-shaker')
 def start_shaker():
     motor.ShakerTableOn()
     return "Success", 200
 
 
+# Stops the shaker motor
 @app.route('/stop-shaker')
 def stop_shaker():
     motor.ShakerTableOff()
     return "Success", 200
 
 
+# Starts the conveyor belt
 @app.route('/start-conveyor')
 def start_conveyor():
     motor.ConveyorBeltOn()
     return "Success", 200
 
 
+# Stops the conveyor belt
 @app.route('/stop-conveyor')
 def stop_conveyor():
     motor.ConveyorBeltOff()
     return "Success", 200
 
 
+# Processes an image, returning list of seen Legos and an
+# annotated image.
 @app.route('/process-img')
 def process_img():
     img = copy_over_last_img()
@@ -82,8 +91,7 @@ def process_img():
             files=[('image', ('image.jpg', encoded_image, 'image/jpeg'))]).text
 
 
-
-
+# Copy the last image taken by the other thread into our own buffer.
 def copy_over_last_img() -> numpy.ndarray:
     # Get last image from shared buffer
     mutex.acquire()
@@ -95,6 +103,7 @@ def copy_over_last_img() -> numpy.ndarray:
     return last_img
 
 
+# Attempt to either initialize or re-initialize the camera.
 def reinit_camera() -> None:
     global vid
     # define a video capture object
@@ -114,6 +123,7 @@ def reinit_camera() -> None:
         pass
 
 
+# Capture an image and save it to the shared buffer every 300ms.
 def camera_loop(img_array: multiprocessing.Array, last_img_lock: threading.Lock) -> None:
     global vid
 
@@ -142,20 +152,11 @@ def camera_loop(img_array: multiprocessing.Array, last_img_lock: threading.Lock)
         if not buffer_filled.value:
             print("Camera ready, buffer filled.")
             buffer_filled.value = True
-
-        # Resize frame for display
-        #frame75 = cv2.resize(frame, (852, 480), interpolation=cv2.INTER_AREA)
-
-        # Display the resulting frame
-        #cv2.imshow('frame', frame75)
-
-        #key = cv2.waitKey(1)
-        #if key & 0xFF == ord('q'):
-        #    break
         
         time.sleep(0.3)
 
 
+# Entry point for the camera thread.
 def run_camera(img_array: multiprocessing.Array, last_img_lock: threading.Lock) -> None:
     global vid
 

@@ -577,6 +577,8 @@ class ArgumentError(Exception):
         super().__init__(msg)
 
 
+# Class to represent a progress bar. These are printed out after
+# each image is completed.
 class Task():
     max_name_len = 0
     max_total_len = 0
